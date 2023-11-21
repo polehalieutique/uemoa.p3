@@ -16,13 +16,3 @@
 hello <- function() {
   print("Hello, world!")
 }
-
-usethis::create_github_token()
-
- h
-
-library(gitcreds)
-
-#Pour l'enregistrer il va demander le tocjken que l'on copie
-
-credentials::set_github_pat("polehalieutique/uemoa.p3")
