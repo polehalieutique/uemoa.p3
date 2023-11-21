@@ -19,6 +19,7 @@ hello <- function() {
 
 usethis::create_github_token()
 
+ h
 
 library(gitcreds)
 
