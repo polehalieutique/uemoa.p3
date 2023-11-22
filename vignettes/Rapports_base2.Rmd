@@ -1,0 +1,1229 @@
+---
+title: "UEMOA-RAPPORT"
+author: "Jerome Guitton, Faustin Hounkpatin, Mohamed Soumah"
+date: '2023-07-13'
+always_allow_html: true
+output:
+  html_document: 
+   toc: yes
+   toc_float: true
+   theme: united
+   number_sections: true
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())
+
+library(DBI)
+library(dplyr)
+library(ggplot2)
+library(sf)
+library(leaflet)
+library(leaflet.providers)
+
+library(osmdata)
+library(tidyr)
+ library(htmlwidgets)
+ library(htmltools)
+library(kableExtra)
+library(ggpubr)
+
+#remotes::install_github ("polehalieutique/Uemoa.p3")
+
+library(Uemoa.p3)
+#remotes::install_github ("ropensci/osmdata")
+
+data('sen.donnees')
+Sys.sleep(4)
+donnees<-sen.donnees
+
+
+```
+
+
+
+```{r}
+unique(toupper(donnees$effectif_site_debar$pays))->pays
+
+paste("Rapport du ",date(),"pour ",pays,sep=' ')
+```
+# 1.	Contexte et objectifs
+
+Mettre ici les contextes et objectifs
+
+# 2.	Méthodologie
+
+Moyens réunis et calendrier
+-	Nombre d’enquêteurs mobilisés
+
+
+
+
+## Base de sondage des sites de débarquement/vente en frais, stratifié par niveau adm. 1
+
+## Types d’enquêtes déployées
+
+	
+-	Période de l’enquête terrain
+-	Exhaustivité/échantillonnage
+-	Nbre de sites enquêtés, nbre d’opérateurs interviewés
+
+### Suivi des effectifs 
+```{r}
+donnees$effectif_site_debar %>% 
+  group_by(niveau_adm1) %>% 
+  summarise(nb.enquete=n())->sites.enquete
+
+sites.enquete %>% kbl() %>%  kable_styling()
+
+ggplot(sites.enquete)+geom_bar(aes(x=niveau_adm1,y=nb.enquete),stat='identity')+
+  coord_flip()
+
+
+
+```
+
+
+```{r}
+
+rm(liste.sites)
+
+liste.sites.init<-donnees$effectif_site_debar %>% mutate(longitude=as.numeric(Long_dec),latitude=as.numeric(lat_dec))
+
+
+liste.sites<-st_as_sf(filter(liste.sites.init,!is.na(longitude) & !is.na(latitude)), coords = c("longitude", "latitude"),remove=FALSE, crs = 4326, agr = "constant")
+
+leaflet(liste.sites %>% filter(latitude!=0 ) %>% st_drop_geometry() %>% 
+  dplyr::mutate(latitude=as.numeric(latitude),longitude=as.numeric(longitude))) %>% addProviderTiles("Esri.WorldImagery")  %>%
+  addCircleMarkers(radius = 10,
+    color = 'red',
+    stroke = FALSE, fillOpacity = 0.5) %>% 
+   addLabelOnlyMarkers(~longitude,~latitude, label =  ~as.character(nom_site), 
+                      labelOptions = labelOptions(noHide = T, direction = 'top', textOnly = T))
+
+
+```
+
+
+Mode d’enregistrement et bancarisation des données collectées
+
+Traitement des données
+
+
+# Résultats 
+
+## 	Suivi périodique des effectifs
+
+
+
+
+Nombre d’unités de pêche (total et de différentes catégories), par région, par pays
+
+### Nombre d’unités de pêche (total et de différentes catégories), par région, par pays
+
+
+```{r}
+liste.sites.init %>% inner_join(donnees$effectif_denombre) %>% 
+  mutate(groupe_engin=substr(type_engin,1,4)) %>% 
+  group_by(groupe_engin,code_strate,type_pirogue) %>% 
+  dplyr::summarise(Equipage_moyen=mean(nb_equipage),Nbre_embar=sum(nb_unites))%>% 
+  kbl() %>% kable_styling()
+```
+
+```{r}
+liste.sites.init %>% inner_join(donnees$effectif_denombre) %>% 
+  mutate(groupe_engin=substr(type_engin,1,4)) %>% 
+  group_by(groupe_engin,niveau_adm1) %>% 
+  dplyr::summarise(Nbre_embar=sum(nb_unites))%>% 
+  ggplot()+geom_bar(aes(x=niveau_adm1,y=Nbre_embar,fill=groupe_engin),stat='identity')
+  
+
+liste.sites.init  %>% inner_join(donnees$effectif_denombre) %>% 
+  mutate(groupe_engin=substr(type_engin,1,4)) %>% 
+  group_by(type_pirogue,niveau_adm1) %>% 
+  dplyr::summarise(Nbre_embar=sum(nb_unites))%>% 
+  ggplot()+geom_bar(aes(x=niveau_adm1,y=Nbre_embar,fill=type_pirogue),stat='identity')
+```
+
+
+
+###  Taux de motorisation des U.P. (total et par catégorie d’U.P.), par région, par pays
+
+
+
+```{r }
+
+liste.sites.init %>% inner_join(donnees$effectif_denombre) %>%
+  mutate(groupe_engin=substr(type_engin,1,4)) %>%
+  group_by(groupe_engin,motorisation) %>%
+  dplyr::summarise(Nbre_embar=sum(nb_unites))->motor1
+
+motor1 %>% dplyr::group_by(groupe_engin) %>% dplyr::summarise(nb.total=sum(Nbre_embar)) %>%
+  inner_join(motor1) %>% mutate(Pourcent=100*Nbre_embar/nb.total) %>%
+  ggplot()+geom_bar(aes(x=groupe_engin,fill=motorisation,y=Pourcent),stat='identity')
+
+
+liste.sites.init  %>% inner_join(donnees$effectif_denombre) %>%
+  mutate(groupe_engin=substr(type_engin,1,4)) %>%
+  group_by(niveau_adm1 ,groupe_engin,motorisation) %>%
+  dplyr::summarise(Nbre_embar=sum(nb_unites))->motor1.reg
+
+motor1.reg %>% dplyr::group_by(groupe_engin,niveau_adm1) %>% dplyr::summarise(nb.total=sum(Nbre_embar)) %>%
+  inner_join(motor1.reg) %>% mutate(Pourcent=100*Nbre_embar/nb.total) %>%
+  ggplot()+geom_bar(aes(x=groupe_engin,fill=motorisation,y=Pourcent),stat='identity')+
+  facet_wrap(~niveau_adm1)+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
+
+```
+
+###  Nombre de pêcheurs (valeur approchée par les moyennes par catégorie d’U.P.), par région, par pays
+
+```{r}
+liste.sites.init  %>% inner_join(donnees$effectif_denombre) %>%
+  mutate(groupe_engin=substr(type_engin,1,4)) %>%
+  group_by(groupe_engin) %>%
+  dplyr::summarise(Equipage_moyen=mean(nb_equipage),Nbre_embar=sum(nb_unites))%>%
+  mutate(nb.pecheur=Nbre_embar*Equipage_moyen)->nb.pecheurs
+
+nb.pecheurs %>%  kbl() %>% kable_styling()
+
+nb.pecheurs %>% dplyr::summarise(nb.total=sum(nb.pecheur)) %>%
+ kbl() %>% kable_styling()
+
+
+
+```
+
+Calcul par région
+
+```{r }
+liste.sites.init  %>% inner_join(donnees$effectif_denombre) %>%
+  mutate(groupe_engin=substr(type_engin,1,4)) %>%
+  group_by(groupe_engin,niveau_adm1) %>%
+  dplyr::summarise(Equipage_moyen=mean(nb_equipage),Nbre_embar=sum(nb_unites))%>%
+  mutate(nb.pecheur=Nbre_embar*Equipage_moyen)->nb.pecheurs.reg
+
+nb.pecheurs.reg %>%  kbl() %>% kable_styling()
+
+nb.pecheurs.reg %>% group_by(niveau_adm1) %>% dplyr::summarise(nb.total=sum(nb.pecheur)) %>%
+ kbl() %>% kable_styling()
+
+liste.sites.init %>% inner_join(donnees$effectif_denombre) %>%
+  mutate(groupe_engin=substr(type_engin,1,4)) %>%
+  select(niveau_adm1,groupe_engin,nb_equipage) %>%
+  ggplot()+geom_point(aes(x=niveau_adm1,y=nb_equipage))+
+  facet_wrap(~groupe_engin)+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  ggtitle("Valeurs équipage moyen par groupe d'engin et région")
+
+```
+
+###  Nombre approximatif de professionnels de différents types, par région
+
+
+
+```{r }
+
+
+liste.sites.init[,c(1,13,seq(39,45))] %>%
+  pivot_longer( cols = names(liste.sites.init)[c(seq(39,45))], names_to = "Operateurs") %>%
+  group_by(Operateurs) %>%
+  summarize(nb.operateurs=sum(value)) ->nb.ope
+nb.ope %>%
+  kbl() %>% kable_styling()
+
+ggplot(nb.ope)+geom_bar(aes(x=Operateurs,y=nb.operateurs),stat='identity')
+
+
+
+liste.sites.init[,c(1,13,seq(39,45))] %>%
+  pivot_longer( cols = names(liste.sites.init)[c(seq(39,45))], names_to = "Operateurs") %>%
+  group_by(niveau_adm1,Operateurs) %>%
+  summarize(nb.operateurs=sum(value)) ->nb.ope.reg
+nb.ope.reg%>%
+  kbl() %>% kable_styling()
+
+ggplot(nb.ope.reg)+geom_bar(aes(x=Operateurs,y=nb.operateurs),stat='identity')+
+  facet_wrap(~niveau_adm1)+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  ggtitle("Nombre d'opérateur région")
+
+
+```
+
+###  Nombre (ou %age) de sites disposant de tel ou tel type de commodités, par région, par pays
+
+
+
+```{r}
+total<-dim(liste.sites.init)[1]
+
+liste.sites.init[,c(1,13,seq(22,38))]  %>%
+  pivot_longer( cols = names(liste.sites)[c(seq(22,38))], names_to = "Commodites") %>%
+  filter(value=='Oui') %>%
+  group_by(Commodites) %>%
+  summarize(Site_debarq=n())%>%
+ mutate(pour.site_debarq=Site_debarq/total*100) -> commodites
+
+commodites %>%
+  kbl() %>% kable_styling()
+
+ggplot(commodites)+
+  geom_bar(stat='identity',aes(x=Commodites,y=pour.site_debarq))+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+Par régions
+
+```{r}
+total.reg<- liste.sites.init %>% group_by(niveau_adm1) %>%
+  dplyr::summarise(total.reg=n())
+
+
+liste.sites.init[,c(1,13,seq(22,38))]  %>%
+  pivot_longer( cols = names(liste.sites)[c(seq(22,38))], names_to = "Commodites") %>%
+  filter(value=='Oui') %>%
+  group_by(Commodites,niveau_adm1) %>%
+  summarize(nb.sites=n()) %>% inner_join(total.reg) %>%
+   dplyr::mutate(pour.site_debarq=100*nb.sites/total.reg)->commodites.reg
+
+commodites.reg %>%
+  kbl() %>% kable_styling()
+
+ggplot(commodites.reg)+
+  geom_bar(stat='identity',aes(x=Commodites,y=pour.site_debarq))+
+  facet_wrap(~niveau_adm1)+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+
+Ceux qui n'ont pas les commodites
+```{r}
+total.reg<- liste.sites.init %>% group_by(niveau_adm1) %>%
+  dplyr::summarise(total.reg=n())
+
+
+liste.sites.init[,c(1,13,seq(22,38))]  %>%
+  pivot_longer( cols = names(liste.sites)[c(seq(22,38))], names_to = "Commodites") %>%
+  filter(value=='Non') %>%
+  group_by(Commodites,niveau_adm1) %>%
+  summarize(nb.sites=n()) %>% inner_join(total.reg) %>%
+   dplyr::mutate(pour.site_debarq=100*nb.sites/total.reg)->commodites.reg
+
+commodites.reg %>%
+  kbl() %>% kable_styling()
+
+ggplot(commodites.reg)+
+  geom_bar(stat='identity',aes(x=Commodites,y=pour.site_debarq))+
+  facet_wrap(~niveau_adm1)+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+
+## Coûts des activités de pêche
+
+### Cout variable moyen d'activité par U.P., au niveau mensuel puis annuel (par catégorie d'U.P.)
+
+Multiplier le coût par sortie par le nombre de sorties par mois. Pour passer au niveau annuel, multiplié par le nombre de mois effectué avec la technique. Le cas échéant compléter pour l'U.P. par le nombre de mois fait avec l'autre technique.
+
+```{r}
+test.eco=nrow(donnees$eco_unite)!=0
+```
+
+
+```{r eval=test.eco}
+
+listes_site_eco.init<- donnees$eco_unite %>% mutate(pays=toupper(pays)) %>% mutate(libel_site=(nom_site)) %>% inner_join(donnees$ref_sites,by=c('pays','libel_site'))
+
+
+```
+
+
+```{r  eval=test.eco}
+
+
+listes_site_eco.init %>% 
+select(c('region_niv1','technique1','nb_sortie_mois_tech1','cout_carburant_tech1','cout_glace_tech1','cout_appat_tech1','cout_nourriture_tech1','val_basse_tech1','val_haute_tech1','val_moyenne_tech1')) %>% 
+  mutate(cout.total.mois=nb_sortie_mois_tech1
+*(coalesce(cout_carburant_tech1,0)+coalesce(cout_glace_tech1,0)+
+    coalesce(cout_appat_tech1,0)+coalesce(cout_nourriture_tech1,0)),
+recette.total.mois=nb_sortie_mois_tech1*val_moyenne_tech1) %>% 
+  dplyr::group_by(technique1) %>% 
+  dplyr::summarise(cout.moyen=mean(cout.total.mois,na.tm=TRUE),recette.moy=mean(recette.total.mois,na.rm=TRUE))->couts.moyens
+
+couts.moyens %>% kbl() %>% 
+  kable_styling()
+
+ couts.moyens %>% pivot_longer(!technique1,names_to = 'Indic') %>% 
+
+   ggplot()+ geom_bar(stat='identity',aes(x=technique1,y=value,fill=Indic),position=position_dodge())+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
+
+
+
+```
+### Cout d'investissement  moyen (rapporté à l'année) des U.P. en termes d'achat d'embarcation (par catégorie d'U.P.)
+
+Diviser le coût d'achat par l'intervalle entre deux achats. L'intervalle moyen entre deux achats peut-être estimée par le double de l'ancienneté d'achat, puisque'on peut considérer que, en moyenne, une enquête se déroule à la demi-durée entre deux achats (cf. moyenne lorsqu'on tire dans une loi uniforme). 
+
+```{r  eval=test.eco}
+listes_site_eco.init %>% 
+select(c('region_niv1','longueur','type_pirogue','annee_achat','etat_achat','prix_achat')) %>% 
+  dplyr::mutate(class_long=case_when(longueur<6 ~ '<6m',longueur>=6 & longueur<12 ~'[6-12[m',longueur>=12 & longueur<20 ~'[12-20[m', longueur>=20 ~ '>=20m')) %>% 
+  ggplot()+geom_boxplot(aes(x=type_pirogue,y=prix_achat))
+
+
+
+listes_site_eco.init %>% 
+select(c('region_niv1','longueur','type_pirogue','annee_achat','etat_achat','prix_achat')) %>% 
+  dplyr::mutate(class_long=case_when(longueur<6 ~ '<6m',longueur>=6 & longueur<12 ~'[6-12[m',longueur>=12 & longueur<20 ~'[12-20[m', longueur>=20 ~ '>=20m')) %>% 
+  dplyr::group_by(type_pirogue,class_long) %>% 
+  dplyr::summarise(prixachat.moyen=mean(prix_achat,na.rm=TRUE))->investissement.moyen
+
+investissement.moyen %>% kbl() %>% 
+  kable_styling()
+  
+ggplot(investissement.moyen)+ geom_bar(stat='identity',aes(x=type_pirogue,y=prixachat.moyen,fill=class_long),position=position_dodge())
+
+
+```
+### Cout de maintenance moyen des U.P. en termes d'entretien de l'embarcation (par catégorie d'U.P.)
+
+Moyenne des coûts annuels de charpentier, en compatbailisant zero lorsque pas de recours au charpentier. 
+
+
+```{r  eval=test.eco}
+
+
+
+
+listes_site_eco.init %>% 
+select(c('region_niv1','type_pirogue','cout_charpentier','combien_charpentier')) %>% 
+  dplyr::group_by(type_pirogue) %>% 
+  dplyr::summarise(combien_charpentier.moyen=mean(combien_charpentier,na.rm=TRUE))->cout.charpent.moyen
+
+cout.charpent.moyen %>% kbl() %>% 
+  kable_styling()
+  
+ggplot(cout.charpent.moyen)+ geom_bar(stat='identity',aes(x=type_pirogue,y=combien_charpentier.moyen),fill='orange')+ggtitle("Cout moyen des travaux de charpente")
+
+listes_site_eco.init %>% 
+select(c('region_niv1','type_pirogue','cout_charpentier','combien_charpentier')) %>% 
+  dplyr::group_by(type_pirogue,cout_charpentier) %>% 
+  dplyr::summarise(combien_travaux.char=n())->nb.trav.charpent
+
+ggplot(nb.trav.charpent)+
+  geom_bar(stat='identity',aes(x=type_pirogue,y=combien_travaux.char,fill=coalesce(cout_charpentier,'NSP')))
+
+
+```
+
+Est ce qu'il y a des diff region
+
+```{r  eval=test.eco}
+
+
+
+
+listes_site_eco.init %>% 
+select(c('region_niv1','type_pirogue','cout_charpentier','combien_charpentier')) %>% 
+  dplyr::group_by(type_pirogue,region_niv1) %>% 
+  dplyr::summarise(combien_charpentier.moyen=mean(combien_charpentier,na.rm=TRUE))->cout.charpent.moyen.reg
+
+cout.charpent.moyen.reg %>% kbl() %>% 
+  kable_styling()
+  
+ggplot(cout.charpent.moyen.reg)+ geom_bar(stat='identity',aes(x=type_pirogue,fill=region_niv1,y=combien_charpentier.moyen),position=position_dodge())
+
+
+
+
+```
+
+
+### Cout moyen consentis en achat/renouvellement des materiels de sécurité, (par catégorie d'U.P.)
+
+
+Sommer les couts consentis pour l'achat/renouvellement des différents matériels de sécurité lors de la dernière année.
+
+
+
+```{r  eval=test.eco}
+
+
+listes_site_eco.init %>%
+select(c('region_niv1','longueur','remplace_gilet','cout_gilet','remplace_gps','cout_gps','remplace_feux','cout_feux','remplace_moteur2','cout_moteur2','remplace_compas','cout_compas','remplace_phramacie','cout_phramacie')) %>% 
+  dplyr::filter(remplace_gilet=='Oui') %>% 
+  dplyr::mutate(class_long=case_when(longueur<6 ~ '<6m',longueur>=6 & longueur<12 ~'[6-12[m',longueur>=12 & longueur<20 ~'[12-20[m', longueur>=20 ~ '>=20m')) %>% 
+  dplyr::group_by(region_niv1,class_long) %>% 
+  dplyr::summarise(moy.cout.gilet=mean(cout_gilet,na.rm=TRUE))->couts.gilets
+
+couts.gilets %>% kbl() %>%
+  kable_styling()
+
+ggplot(couts.gilets)+ geom_bar(stat='identity',aes(x=region_niv1,fill=class_long,y=moy.cout.gilet),position=position_dodge())
+
+
+```
+
+Même chose en rajoutant la technique principale
+
+```{r  eval=test.eco}
+
+
+listes_site_eco.init %>%
+select(c('region_niv1','technique1','longueur','remplace_gilet','cout_gilet','remplace_gps','cout_gps','remplace_feux','cout_feux','remplace_moteur2','cout_moteur2','remplace_compas','cout_compas','remplace_phramacie','cout_phramacie')) %>% 
+  dplyr::filter(remplace_gilet=='Oui') %>% 
+  dplyr::mutate(class_long=case_when(longueur<6 ~ '<6m',longueur>=6 & longueur<12 ~'[6-12[m',longueur>=12 & longueur<20 ~'[12-20[m', longueur>=20 ~ '>=20m')) %>% 
+  dplyr::group_by(technique1,class_long) %>% 
+  dplyr::summarise(moy.cout.gilet=mean(cout_gilet,na.rm=TRUE))->couts.gilets
+
+couts.gilets %>% kbl() %>%
+  kable_styling()
+
+ggplot(couts.gilets)+ geom_bar(stat='identity',aes(x=technique1,fill=class_long,y=moy.cout.gilet),position=position_dodge())
+
+
+```
+```{r  eval=test.eco}
+
+
+listes_site_eco.init %>%
+select(c('region_niv1','technique1','longueur','remplace_gilet','cout_gilet','remplace_gps','cout_gps','remplace_feux','cout_feux','remplace_moteur2','cout_moteur2','remplace_compas','cout_compas','remplace_phramacie','cout_phramacie')) %>% 
+  dplyr::filter(remplace_gps=='Oui') %>% 
+  dplyr::mutate(class_long=case_when(longueur<6 ~ '<6m',longueur>=6 & longueur<12 ~'[6-12[m',longueur>=12 & longueur<20 ~'[12-20[m', longueur>=20 ~ '>=20m')) %>% 
+  dplyr::group_by(technique1,class_long) %>% 
+  dplyr::summarise(moy.cout.gps=mean(cout_gps,na.rm=TRUE))->couts.gps
+
+couts.gps %>% kbl() %>%
+  kable_styling()
+
+ggplot(couts.gps)+ geom_bar(stat='identity',aes(x=technique1,fill=class_long,y=moy.cout.gps),position=position_dodge())
+
+
+```
+
+Pour les moteurs de secours
+
+```{r  eval=test.eco}
+
+
+listes_site_eco.init %>%
+select(c('region_niv1','technique1','longueur','remplace_gilet','cout_gilet','remplace_gps','cout_gps','remplace_feux','cout_feux','remplace_moteur2','cout_moteur2','remplace_compas','cout_compas','remplace_phramacie','cout_phramacie')) %>% 
+  dplyr::filter(remplace_moteur2=='Oui') %>% 
+  dplyr::mutate(class_long=case_when(longueur<6 ~ '<6m',longueur>=6 & longueur<12 ~'[6-12[m',longueur>=12 & longueur<20 ~'[12-20[m', longueur>=20 ~ '>=20m')) %>% 
+  dplyr::group_by(technique1,class_long) %>% 
+  dplyr::summarise(moy.cout_moteur2=mean(cout_moteur2,na.rm=TRUE))->cout.moteur2
+
+cout.moteur2 %>% kbl() %>%
+  kable_styling()
+
+ggplot(cout.moteur2)+ geom_bar(stat='identity',aes(x=technique1,fill=class_long,y=moy.cout_moteur2),position=position_dodge())
+
+
+```
+
+Pour les feux 
+
+```{r  eval=test.eco}
+
+
+listes_site_eco.init %>%
+select(c('region_niv1','technique1','longueur','remplace_gilet','cout_gilet','remplace_gps','cout_gps','remplace_feux','cout_feux','remplace_moteur2','cout_moteur2','remplace_compas','cout_compas','remplace_phramacie','cout_phramacie')) %>% 
+  dplyr::filter(remplace_feux=='Oui') %>% 
+  dplyr::mutate(class_long=case_when(longueur<6 ~ '<6m',longueur>=6 & longueur<12 ~'[6-12[m',longueur>=12 & longueur<20 ~'[12-20[m', longueur>=20 ~ '>=20m')) %>% 
+  dplyr::group_by(technique1,class_long) %>% 
+  dplyr::summarise(moy.cout_feux=mean(cout_feux,na.rm=TRUE))->cout.feux
+
+cout.feux %>% kbl() %>%
+  kable_styling()
+
+ggplot(cout.feux)+ geom_bar(stat='identity',aes(x=technique1,fill=class_long,y=moy.cout_feux),position=position_dodge())
+
+
+```
+
+En faisant la somme de tous les éléments de securité 
+
+```{r  eval=test.eco}
+
+
+listes_site_eco.init %>%
+select(c('region_niv1','technique1','longueur','remplace_gilet','cout_gilet','remplace_gps','cout_gps','remplace_feux','cout_feux','remplace_moteur2','cout_moteur2','remplace_compas','cout_compas','cout_moteur2','remplace_phramacie','cout_phramacie')) %>% 
+  dplyr::mutate(class_long=case_when(longueur<6 ~ '<6m',longueur>=6 & longueur<12 ~'[6-12[m',longueur>=12 & longueur<20 ~'[12-20[m', longueur>=20 ~ '>=20m')) %>% 
+  dplyr::group_by(technique1,class_long) %>% 
+  dplyr::summarise(moy.cout_total=mean(cout_gps+cout_feux+cout_gilet+cout_moteur2+cout_compas+cout_phramacie,na.rm=TRUE))->cout.total
+
+cout.total %>% kbl() %>%
+  kable_styling()
+
+ggplot(cout.total)+ geom_bar(stat='identity',aes(x=technique1,fill=class_long,y=moy.cout_total),position=position_dodge())
+
+
+```
+
+
+
+### Cout moyens de la migration de base, par type d'U.P.	
+
+Ne faire ce calcul que pour les pirogues effectuant des migrations (changement de base) au cours de l'année. Sommer les couts consentis pour l'hebergement/cuisine et pour le transport vers les lieux de migration. Si zero, comptabiliser zero.
+
+```{r  eval=test.eco}
+
+listes_site_eco.init %>%
+select(c('region_niv1','technique1','migration','cout_migration','cout_mig_carburant','cout_mig_heberge')) %>% 
+filter(migration=='Oui') %>% 
+  dplyr::group_by(technique1) %>% 
+  dplyr::summarise(moy.cout_migration.carb=mean(cout_mig_carburant,na.rm=TRUE),moy.cout_migration.heberge=mean(cout_mig_heberge,na.rm=TRUE),nb.reponse=n())->cout.migration
+
+cout.migration %>% kbl() %>%
+  kable_styling()
+
+cout.migration %>% pivot_longer(!technique1,names_to='Indic') %>% 
+ggplot()+ geom_bar(stat='identity',aes(x=technique1,y=value),fill='lightgreen',position=position_dodge())+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  facet_wrap(~Indic,scales = 'free_y')
+
+
+```
+
+### Effort de peche par techniques 
+
+C'est un nombre de sortie annuel par technique en multupliant le nombre de sortie par mois et le nombre de mois d'utilisation de la technique 1
+
+```{r  eval=test.eco}
+
+
+donnees$eco_mois_tech1 %>% 
+  group_by(numero_fiche,id_unite,nom_site,date_enquete) %>% 
+  summarise(nb.mois.activ.tech1=n())->activite.tech1
+
+
+listes_site_eco.init %>% 
+  inner_join(activite.tech1,by=c('numero_fiche','id_unite','nom_site','date_enquete'))%>%
+select(c('region_niv1','technique1','nb.mois.activ.tech1','nb_sortie_mois_tech1')) %>% 
+  dplyr::group_by(technique1) %>% 
+  dplyr::summarise(nb.sortie.annuel=mean(nb.mois.activ.tech1*nb_sortie_mois_tech1,na.rm=TRUE),nb.reponse=n())->effort.annuel
+
+effort.annuel %>% kbl() %>%
+  kable_styling()
+
+
+ggplot(effort.annuel)+ geom_bar(stat='identity',aes(x=technique1,y=nb.sortie.annuel),fill='lightgreen',position=position_dodge())+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
+```
+C'est un nombre de sortie annuel par technique en multupliant le nombre de sortie par mois et le nombre de mois d'utilisation de la technique 2
+
+```{r  eval=test.eco}
+
+
+donnees$eco_mois_tech2 %>% 
+  group_by(numero_fiche,id_unite,nom_site,date_enquete) %>% 
+  summarise(nb.mois.activ.tech2=n())->activite.tech2
+
+
+listes_site_eco.init %>% 
+  inner_join(activite.tech2,by=c('numero_fiche','id_unite','nom_site','date_enquete'))%>%
+select(c('region_niv1','technique2','nb.mois.activ.tech2','nb_sortie_mois_tech2')) %>% 
+  dplyr::group_by(technique2) %>% 
+  dplyr::summarise(nb.sortie.annuel=mean(nb.mois.activ.tech2*nb_sortie_mois_tech2,na.rm=TRUE),nb.reponse=n())->effort.annuel.tech2
+
+effort.annuel.tech2 %>% kbl() %>%
+  kable_styling()
+
+
+ggplot(effort.annuel.tech2)+ geom_bar(stat='identity',aes(x=technique2,y=nb.sortie.annuel),fill='lightblue',position=position_dodge())+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
+```
+
+## Module de transformation
+
+### Informations générales sur les sites enquêtés
+
+```{r echo=FALSE}
+
+
+
+liste.sites.init<-donnees$transfo_sites %>% mutate(longitude=as.numeric(long_deg_deci),latitude=as.numeric(lat_deg_deci))
+
+
+liste.sites<-st_as_sf(filter(liste.sites.init,!is.na(longitude) & !is.na(latitude)), coords = c("longitude", "latitude"),remove=FALSE, crs = 4326, agr = "constant")
+
+
+#fond.init<-st_read("world_borders.shp",crs=4326)
+
+#sf_use_s2(FALSE)
+
+#fond<-st_crop(fond.init,st_bbox(liste.sites %>% filter(latitude!=0 )))
+
+
+```
+### Nombre de site de Transformation Débarquement par communes/Départements côtièrs
+```{r echo=FALSE}
+total<-dim(liste.sites.init)[1]
+liste.sites.init %>% 
+  mutate(Région=niveau_administr_01,Departement=niveau_administr_02) %>% 
+  dplyr::group_by(Région,Departement) %>% dplyr::summarize(Site_transfo=n()) %>% 
+  mutate(pourcentage.site_debar=Site_transfo/total*100) %>% 
+  kbl() %>% kable_styling()
+
+nbsite.loc<-!(nrow(liste.sites %>% st_drop_geometry())==0)
+#On conditionne la prochaine carte au fait qu'il y ait des cooordonnées des sites de transfor
+
+```
+
+
+
+```{r eval=nbsite.loc}
+
+
+
+leaflet(liste.sites.init %>% filter(latitude!=0 ) %>% 
+  dplyr::mutate(latitude=as.numeric(latitude),longitude=as.numeric(longitude))) %>% addProviderTiles("Esri.WorldImagery")  %>%
+  addCircleMarkers(radius = 10,
+    color = 'red',
+      stroke = FALSE, fillOpacity = 0.5) %>% 
+   addLabelOnlyMarkers(~longitude,~latitude, label =  ~as.character(code_site), 
+                      labelOptions = labelOptions(noHide = T, direction = 'top', textOnly = T))
+
+
+
+
+
+
+
+```
+
+### Par régions, Site de transformation liés au site de débarquement 
+
+```{r}
+
+names(donnees$transfo_sites)
+
+donnees$transfo_sites %>% 
+  mutate(Région=niveau_administr_01) %>%
+  select(Région,code_site,site_transf_debarq) %>% 
+  group_by(Région,site_transf_debarq) %>% 
+  summarize(nb_sites=n()) %>% 
+  ggplot()+geom_bar(stat='identity',aes(x=Région,fill=site_transf_debarq,
+                                        y=nb_sites),position=position_dodge())
+
+
+```
+
+
+```{r}
+donnees$transfo_sites[,c(12,seq(25,28))] %>% 
+       pivot_longer( !niveau_administr_01, names_to = "Emploi") %>% 
+  mutate(Région=niveau_administr_01) %>%
+  group_by(Région,Emploi) %>% summarise(value=sum(value,na.rm=TRUE)) %>% 
+  ggplot()+geom_bar(stat='identity',aes(x=Région,fill=Emploi,y=value),position=position_dodge())
+
+  
+  
+
+```
+
+### Commodités Présent et fonctionne Pays
+
+```{r}
+
+total<-dim(liste.sites.init)[1]
+
+liste.sites.init[,c(1,14,seq(30,41))]  %>%
+  pivot_longer( cols = names(liste.sites)[c(seq(30,41))], names_to = "Commodites") %>%
+  filter(value=='Présent et fonctionne') %>%
+  group_by(Commodites) %>%
+  summarize(Site_transf=n())%>%
+ mutate(pour.Site_transf=Site_transf/total*100) -> commodites
+
+commodites %>%
+  kbl() %>% kable_styling()
+```
+
+
+```{r}
+ggplot(commodites)+
+  geom_bar(stat='identity',aes(x=Commodites,y=pour.Site_transf))+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+### Commodités Présent et fonctionne Région
+
+```{r}
+total.reg<- liste.sites.init %>% 
+  group_by(niveau_administr_01) %>%
+  dplyr::summarise(total.reg=n())
+
+
+liste.sites.init[,c(1,12,14,seq(30,41))]  %>%
+  pivot_longer( cols = names(liste.sites)[c(seq(30,41))], names_to = "Commodites") %>%
+  filter(value=='Présent et fonctionne') %>%
+  group_by(niveau_administr_01,Commodites) %>%
+  summarize(nb.sites=n()) %>% inner_join(total.reg) %>%
+   dplyr::mutate(pour.Site_transf=100*nb.sites/total.reg)->commodites.reg
+
+commodites.reg %>%
+  kbl() %>% kable_styling()
+```
+
+```{r eval=nrow(commodites.reg)!=0}
+ggplot(commodites.reg)+
+  geom_bar(stat='identity',aes(x=Commodites,y=pour.Site_transf))+
+  facet_wrap(~niveau_administr_01)+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+### Commodités Existe mais ne  fonctionne pas bien ou pas du tout Pays
+
+```{r}
+total<-dim(liste.sites.init)[1]
+
+liste.sites.init[,c(1,14,seq(30,41))]  %>%
+  pivot_longer( cols = names(liste.sites)[c(seq(30,41))], names_to = "Commodites") %>%
+  filter(value=='Existe mais ne  fonctionne pas bien ou pas du tout') %>%
+  group_by(Commodites) %>%
+  summarize(Site_transf=n())%>%
+ mutate(pour.Site_transf=Site_transf/total*100) -> commodites
+
+commodites %>%
+  kbl() %>% kable_styling()
+```
+
+
+```{r}
+ggplot(commodites)+
+  geom_bar(stat='identity',aes(x=Commodites,y=pour.Site_transf))+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+### Commodités Existe mais ne  fonctionne pas bien ou pas du tout Région
+
+```{r}
+total.reg<- liste.sites.init %>% 
+  group_by(niveau_administr_01) %>%
+  dplyr::summarise(total.reg=n())
+
+
+liste.sites.init[,c(1,12,14,seq(30,41))]  %>%
+  pivot_longer( cols = names(liste.sites)[c(seq(30,41))], names_to = "Commodites") %>%
+  filter(value=='Existe mais ne  fonctionne pas bien ou pas du tout') %>%
+  group_by(niveau_administr_01,Commodites) %>%
+  summarize(nb.sites=n()) %>% inner_join(total.reg) %>%
+   dplyr::mutate(pour.Site_transf=100*nb.sites/total.reg)->commodites.reg
+
+commodites.reg %>%
+  kbl() %>% kable_styling()
+```
+
+
+```{r eval=nrow(commodites.reg)!=0}
+ggplot(commodites.reg)+
+  geom_bar(stat='identity',aes(x=Commodites,y=pour.Site_transf))+
+  facet_wrap(~niveau_administr_01)+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+
+### Commodités Absent Pays
+
+```{r}
+total<-dim(liste.sites.init)[1]
+
+liste.sites.init[,c(1,14,seq(30,41))]  %>%
+  pivot_longer( cols = names(liste.sites)[c(seq(30,41))], names_to = "Commodites") %>%
+  filter(value=='Absent') %>%
+  group_by(Commodites) %>%
+  summarize(Site_transf=n())%>%
+ mutate(pour.Site_transf=Site_transf/total*100) -> commodites
+
+commodites %>%
+  kbl() %>% kable_styling()
+```
+
+
+```{r eval=nrow(commodites)!=0}
+ggplot(commodites)+
+  geom_bar(stat='identity',aes(x=Commodites,y=pour.Site_transf))+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+### Commodités Absent Région
+
+```{r}
+total.reg<- liste.sites.init %>% 
+  group_by(niveau_administr_01) %>%
+  dplyr::summarise(total.reg=n())
+
+
+liste.sites.init[,c(1,12,14,seq(30,41))]  %>%
+  pivot_longer( cols = names(liste.sites)[c(seq(30,41))], names_to = "Commodites") %>%
+  filter(value=='Absent') %>%
+  group_by(niveau_administr_01,Commodites) %>%
+  summarize(nb.sites=n()) %>% inner_join(total.reg) %>%
+   dplyr::mutate(pour.Site_transf=100*nb.sites/total.reg)->commodites.reg
+
+commodites.reg %>%
+  kbl() %>% kable_styling()
+```
+
+
+```{r eval=nrow(commodites.reg)!=0}
+ggplot(commodites.reg)+
+  geom_bar(stat='identity',aes(x=Commodites,y=pour.Site_transf))+
+  facet_wrap(~niveau_administr_01)+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+
+
+### Commodités NSP Pays
+
+```{r  }
+total<-dim(liste.sites.init)[1]
+
+liste.sites.init[,c(1,14,seq(30,41))]  %>%
+  pivot_longer( cols = names(liste.sites)[c(seq(30,41))], names_to = "Commodites") %>%
+  filter(value=='NSP') %>%
+  group_by(Commodites) %>%
+  summarize(Site_transf=n())%>%
+ mutate(pour.Site_transf=Site_transf/total*100) -> commodites
+
+commodites %>%
+  kbl() %>% kable_styling()
+```
+
+
+```{r eval=nrow(commodites)!=0}
+ggplot(commodites)+
+  geom_bar(stat='identity',aes(x=Commodites,y=pour.Site_transf))+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+### Commodités NSP Région
+
+```{r}
+total.reg<- liste.sites.init %>% 
+  group_by(niveau_administr_01) %>%
+  dplyr::summarise(total.reg=n())
+
+
+liste.sites.init[,c(1,12,14,seq(30,41))]  %>%
+  pivot_longer( cols = names(liste.sites)[c(seq(30,41))], names_to = "Commodites") %>%
+  filter(value=='NSP') %>%
+  group_by(niveau_administr_01,Commodites) %>%
+  summarize(nb.sites=n()) %>% inner_join(total.reg) %>%
+   dplyr::mutate(pour.Site_transf=100*nb.sites/total.reg)->commodites.reg
+
+commodites.reg %>%
+  kbl() %>% kable_styling()
+```
+
+
+```{r eval=nrow(commodites.reg)!=0}
+ggplot(commodites.reg)+
+  geom_bar(stat='identity',aes(x=Commodites,y=pour.Site_transf))+
+  facet_wrap(~niveau_administr_01)+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+
+
+
+
+
+
+### professionnels du transformé ayant accès aux commodités (Présent et fonctionne) Pays
+
+```{r eval=(pays!='GNB')}
+
+#total<-dim(liste.sites.init)[1]
+total<-sum(liste.sites.init[,47], na.rm = TRUE)
+
+liste.sites.init[,c(1,14,seq(30,41),47)]  %>%
+  pivot_longer( cols = names(liste.sites)[c(seq(30,41))], names_to = "Commodites") %>%
+  filter(value=='Présent et fonctionne') %>%
+ # filter(value=='Existe mais ne  fonctionne pas bien ou pas du tout') %>%
+ # filter(value=='Présent et fonctionne' | value=='Existe mais ne  fonctionne pas bien ou pas du tout') %>%
+  group_by(Commodites) %>%
+  summarize(Effectif_Operat=sum(combien_operateur_activite, na.rm = TRUE))%>%
+#  donnees <- liste.sites.init(liste.sites.init[,c(seq(30,41))], effectif)
+   mutate(pour.Effectif_Operat=Effectif_Operat/total*100) -> commodites
+
+commodites %>%
+  kbl() %>% kable_styling()
+```
+
+
+```{r eval=nrow(commodites)!=0}
+ggplot(commodites)+
+  geom_bar(stat='identity',aes(x=Commodites,y=pour.Effectif_Operat))+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+### professionnels du transformé ayant accès aux commodités (Présent et fonctionne) Région
+
+```{r eval=(pays!='GNB')}
+total.reg<- liste.sites.init %>% 
+#total.reg <-sum(liste.sites.init[,47], na.rm = TRUE)
+ group_by(niveau_administr_01) %>%
+ dplyr:: summarize(total.reg=sum(combien_operateur_activite, na.rm = TRUE))
+
+
+liste.sites.init[,c(1,12,14,seq(30,41),47)]  %>%
+  pivot_longer( cols = names(liste.sites)[c(seq(30,41))], names_to = "Commodites") %>%
+  filter(value=='Présent et fonctionne') %>%
+  group_by(niveau_administr_01,Commodites) %>%
+  summarize(Effectif_Operat=sum(combien_operateur_activite, na.rm = TRUE)) %>% 
+  
+  inner_join(total.reg) %>%
+   dplyr::mutate(pour.Effectif_Operat=100*Effectif_Operat/total.reg)->commodites.reg
+
+commodites.reg %>%
+  kbl() %>% kable_styling()
+```
+
+
+```{r eval=nrow(commodites.reg)!=0}
+ggplot(commodites.reg)+
+  geom_bar(stat='identity',aes(x=Commodites,y=pour.Effectif_Operat))+
+  facet_wrap(~niveau_administr_01)+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+
+### professionnels du transformé ayant accès aux commodités (Existe mais ne  fonctionne pas bien ou pas du tout) Pays
+
+```{r eval=(pays!='GNB')}
+#total<-dim(liste.sites.init)[1]
+total<-sum(liste.sites.init[,47], na.rm = TRUE)
+
+liste.sites.init[,c(1,14,seq(30,41),47)]  %>%
+  pivot_longer( cols = names(liste.sites)[c(seq(30,41))], names_to = "Commodites") %>%
+  filter(value=='Existe mais ne  fonctionne pas bien ou pas du tout') %>%
+ # filter(value=='Existe mais ne  fonctionne pas bien ou pas du tout') %>%
+ # filter(value=='Présent et fonctionne' | value=='Existe mais ne  fonctionne pas bien ou pas du tout') %>%
+  group_by(Commodites) %>%
+  summarize(Effectif_Operat=sum(combien_operateur_activite, na.rm = TRUE))%>%
+#  donnees <- liste.sites.init(liste.sites.init[,c(seq(30,41))], effectif)
+  
+  
+ mutate(pour.Effectif_Operat=Effectif_Operat/total*100) -> commodites
+
+commodites %>%
+  kbl() %>% kable_styling()
+```
+
+
+```{r eval=nrow(commodites)!=0}
+ggplot(commodites)+
+  geom_bar(stat='identity',aes(x=Commodites,y=pour.Effectif_Operat))+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+### professionnels du transformé ayant accès aux commodités (Existe mais ne  fonctionne pas bien ou pas du tout) Région
+
+```{r eval=(pays!='GNB')}
+total.reg<- liste.sites.init %>% 
+#total.reg <-sum(liste.sites.init[,47], na.rm = TRUE)
+ group_by(niveau_administr_01) %>%
+ dplyr:: summarize(total.reg=sum(combien_operateur_activite, na.rm = TRUE))
+
+
+liste.sites.init[,c(1,12,14,seq(30,41),47)]  %>%
+  pivot_longer( cols = names(liste.sites)[c(seq(30,41))], names_to = "Commodites") %>%
+  filter(value=='Existe mais ne  fonctionne pas bien ou pas du tout') %>%
+  group_by(niveau_administr_01,Commodites) %>%
+  summarize(Effectif_Operat=sum(combien_operateur_activite, na.rm = TRUE)) %>% 
+  
+  inner_join(total.reg) %>%
+   dplyr::mutate(pour.Effectif_Operat=100*Effectif_Operat/total.reg)->commodites.reg
+
+commodites.reg %>%
+  kbl() %>% kable_styling()
+```
+
+
+```{r eval=nrow(commodites.reg)!=0}
+ggplot(commodites.reg)+
+  geom_bar(stat='identity',aes(x=Commodites,y=pour.Effectif_Operat))+
+  facet_wrap(~niveau_administr_01)+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+
+
+### professionnels du site qui prennent poissons transformés du site pour aller vendre ailleurs ayant accès aux commodités (Présent et fonctionne) Pays
+
+```{r eval=(pays!='GNB')}
+#total<-dim(liste.sites.init)[1]
+total<-sum(liste.sites.init[,49], na.rm = TRUE)
+
+liste.sites.init[,c(1,14,seq(30,41),49)]  %>%
+  pivot_longer( cols = names(liste.sites)[c(seq(30,41))], names_to = "Commodites") %>%
+  filter(value=='Présent et fonctionne') %>%
+#  filter(value=='Existe mais ne  fonctionne pas bien ou pas du tout') %>%
+#  filter(value=='Présent et fonctionne' | value=='Existe mais ne  fonctionne pas bien ou pas du tout') %>%
+  group_by(Commodites) %>%
+  summarize(Effectif_Operat=sum(combien_person_pois_transf, na.rm = TRUE))%>%
+#  donnees <- liste.sites.init(liste.sites.init[,c(seq(30,41))], effectif)
+  
+  
+ mutate(pour.Effectif_Operat=Effectif_Operat/total*100) -> commodites
+
+commodites %>%
+  kbl() %>% kable_styling()
+```
+
+
+```{r eval=nrow(commodites)!=0}
+ggplot(commodites)+
+  geom_bar(stat='identity',aes(x=Commodites,y=pour.Effectif_Operat))+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+A REVOIR
+### professionnels du qui prennent poissons transformés du site pour aller vendre ailleurs ayant accès aux commodités (Présent et fonctionne) Région
+
+```{r eval=(pays!='GNB')}
+total.reg<- liste.sites.init %>% 
+#total.reg <-sum(liste.sites.init[,47], na.rm = TRUE)
+ group_by(niveau_administr_01) %>%
+dplyr::summarize(total.reg=sum(combien_person_pois_transf, na.rm = TRUE))
+
+liste.sites.init[,c(1,12,14,seq(30,41),49)]  %>%
+  pivot_longer( cols = names(liste.sites)[c(seq(30,41))], names_to = "Commodites") %>%
+  filter(value=='Présent et fonctionne') %>%
+  group_by(niveau_administr_01,Commodites) %>%
+  summarize(Effectif_Operat=sum(combien_person_pois_transf, na.rm = TRUE)) %>% 
+  
+  inner_join(total.reg) %>%
+   dplyr::mutate(pour.Effectif_Operat=100*Effectif_Operat/total.reg)->commodites.reg
+
+commodites.reg %>%
+  kbl() %>% kable_styling()
+```
+
+
+```{r eval=nrow(commodites.reg)!=0}
+ggplot(commodites.reg)+
+  geom_bar(stat='identity',aes(x=Commodites,y=pour.Effectif_Operat))+
+  facet_wrap(~niveau_administr_01)+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+
+
+### professionnels du site qui prennent poissons transformés du site pour aller vendre ailleurs ayant accès aux commodités (Existe mais ne  fonctionne pas bien ou pas du tout) Pays
+
+```{r eval=(pays!='GNB')}
+#total<-dim(liste.sites.init)[1]
+total<-sum(liste.sites.init[,49], na.rm = TRUE)
+
+liste.sites.init[,c(1,14,seq(30,41),49)]  %>%
+  pivot_longer( cols = names(liste.sites)[c(seq(30,41))], names_to = "Commodites") %>%
+ # filter(value=='Présent et fonctionne') %>%
+  filter(value=='Existe mais ne  fonctionne pas bien ou pas du tout') %>%
+#  filter(value=='Présent et fonctionne' | value=='Existe mais ne  fonctionne pas bien ou pas du tout') %>%
+  group_by(Commodites) %>%
+  summarize(Effectif_Operat=sum(combien_person_pois_transf, na.rm = TRUE))%>%
+#  donnees <- liste.sites.init(liste.sites.init[,c(seq(30,41))], effectif)
+  
+  
+ mutate(pour.Effectif_Operat=Effectif_Operat/total*100) -> commodites
+
+commodites %>%
+  kbl() %>% kable_styling()
+```
+
+
+```{r eval=nrow(commodites)!=0}
+ggplot(commodites)+
+  geom_bar(stat='identity',aes(x=Commodites,y=pour.Effectif_Operat))+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+A REVOIR
+### professionnels du qui prennent poissons transformés du site pour aller vendre ailleurs ayant accès aux commodités (Existe mais ne  fonctionne pas bien ou pas du tout) Région
+
+```{r eval=(pays!='GNB')}
+total.reg<- liste.sites.init %>% 
+#total.reg <-sum(liste.sites.init[,47], na.rm = TRUE)
+ group_by(niveau_administr_01) %>%
+dplyr::summarize(total.reg=sum(combien_person_pois_transf, na.rm = TRUE))
+
+liste.sites.init[,c(1,12,14,seq(30,41),49)]  %>%
+  pivot_longer( cols = names(liste.sites)[c(seq(30,41))], names_to = "Commodites") %>%
+  filter(value=='Existe mais ne  fonctionne pas bien ou pas du tout') %>%
+  group_by(niveau_administr_01,Commodites) %>%
+  summarize(Effectif_Operat=sum(combien_person_pois_transf, na.rm = TRUE)) %>% 
+  
+  inner_join(total.reg) %>%
+   dplyr::mutate(pour.Effectif_Operat=100*Effectif_Operat/total.reg)->commodites.reg
+
+commodites.reg %>%
+  kbl() %>% kable_styling()
+```
+
+
+```{r eval=nrow(commodites.reg)!=0}
+ggplot(commodites.reg)+
+  geom_bar(stat='identity',aes(x=Commodites,y=pour.Effectif_Operat))+
+  facet_wrap(~niveau_administr_01)+
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+
+
+
+### Nombre de focus group
+
+C1-Y-a-t-il en cette période (mois) des commerçant(e)s qui achètent ici du poisson frais aux pêcheurs et le revendent au détail sur le site même ou dans la localité voisine (= micro-mareyeuse) ?     
+
+
+C-2 Y-a-t-il en cette période (mois) des commerçant(e)s qui achètent ici du poisson frais aux pêcheurs et le revendent en gros ou demi-gros à des transporteurs qui quittent le site ou bien vont-elles-mêmes le revendre ailleurs dans des localités distantes (= mareyeurs ou mareyeuses) ?
+
+
+C3- Y-a-t-il en cette période (mois) des personnes, mandatées par des usines, qui achètent ici du poisson frais aux pêcheurs pour alimenter en produits des usines proches ou lointaines (= 
+acheteurs (ses)) ?     
+
+<!-- ```{r} -->
+
+
+<!-- totaux<-donnees$comm_sites %>% select(niveau_administr_01,nbr_micro_marey_c1_revente_site,nbr_marey_c2_revte_site,nbr_acheteur_c3_revte_site) -->
+
+<!-- nb_fiche.c1<-donnees$comm_sites %>% inner_join(donnees$comm_poisson_frais_c1,by=c('num_fiche_enq','date_enq')) %>%  -->
+<!--   dplyr::group_by(niveau_administr_01) %>%  -->
+<!--   dplyr::summarise(nb_enquete.c1=n()) -->
+
+<!-- nb_fiche.c2<-donnees$comm_sites %>% inner_join(donnees$comm_poisson_frais_c2,by=c('num_fiche_enq','date_enq')) %>%  -->
+<!--   dplyr::group_by(niveau_administr_01) %>%  -->
+<!--   dplyr::summarise(nb_enquete.c2=n()) -->
+
+<!-- nb_fiche.c3<-donnees$comm_sites %>% inner_join(donnees$comm_poisson_frais_c3,by=c('num_fiche_enq','date_enq')) %>%  -->
+<!--   dplyr::group_by(niveau_administr_01) %>%  -->
+<!--   dplyr::summarise(nb_enquete.c3=n()) -->
+
+<!-- totaux %>% left_join(nb_fiche.c1) %>%  -->
+<!--   left_join(nb_fiche.c2) %>%  -->
+<!--   left_join(nb_fiche.c3) %>%  -->
+<!-- pivot_longer(!niveau_administr_01,names_to = "donnee") %>%  -->
+<!--   ggplot()+geom_bar(stat='identity',aes(x=donnee,fill=niveau_administr_01,y=value),position=position_dodge()) %>%  -->
+
+
+<!-- totaux %>% left_join(nb_fiche.c1) %>%  -->
+<!--   left_join(nb_fiche.c2) %>%  -->
+<!--   left_join(nb_fiche.c3) %>%  -->
+<!-- pivot_longer(!niveau_administr_01,names_to = "donnee") %>%  -->
+<!--   ggplot()+geom_bar(stat='identity',aes(x=niveau_administr_01,fill=donnee,y=value),position=position_dodge())  -->
+
+
+<!-- ``` -->
